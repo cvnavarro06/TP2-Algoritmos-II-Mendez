@@ -1,4 +1,4 @@
-	#include <stdbool.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
@@ -96,8 +96,8 @@ void insertar_pokemon_ordenado(lista_t *lista, struct pokemon *p)
 
 	bool duplicado = false;
 
-    while (lista_iterador_tiene_siguiente(it) && !pos_encontrada && !duplicado) {
-        struct pokemon *actual = (struct pokemon *)lista_iterador_elemento_actual(it);
+    while (lista_iterador_se_puede_iterar(it) && !pos_encontrada && !duplicado) {
+        struct pokemon *actual = (struct pokemon *)lista_iterador_obtener_elemento(it);
         
 		int cmp = no_case_sensitive_strcmp(p->nombre, actual->nombre);
 
@@ -108,7 +108,7 @@ void insertar_pokemon_ordenado(lista_t *lista, struct pokemon *p)
 		}
 
         if (!pos_encontrada && !duplicado) {
-        	lista_iterador_avanzar(it);
+        	lista_iterador_siguiente(it);
         	posicion++;
 		}
     }
@@ -119,7 +119,7 @@ void insertar_pokemon_ordenado(lista_t *lista, struct pokemon *p)
 		free(p->nombre);	
 		free(p);	
 	}
-	lista_insertar_en_posicion(lista, p, posicion);
+	lista_insertar(lista, p, posicion);
 }
 
 enum rareza_pokemon rareza_enum(char rareza)
@@ -187,7 +187,7 @@ bool insercion_al_tp1(tp1_t *t, FILE* archivo)
 	while (linea && !err) {
 		char *nombre = NULL;
 
-		int leido = fscanf(linea, FOMRATO_LECTURA, &nombre, &velocidad, &peso, &rareza, &otro);
+		int leido = sscanf(linea, FOMRATO_LECTURA, &nombre, &velocidad, &peso, &rareza, &otro);
 
 		if (leido == 4) {
 			struct pokemon *poke = pokemon_crear(nombre, velocidad, peso, rareza);
@@ -272,25 +272,31 @@ bool resto_tps(lista_iterador_t *t1, lista_iterador_t *t2, tp1_t *nuevo)
 
 	size_t posicion = lista_cantidad(nuevo->pokemones);
 
-	while (lista_iterador_tiene_siguiente(t1) && !err) {
-        struct pokemon *p_a = (struct pokemon *)lista_iterador_elemento_actual(t1);
-        struct pokemon *a_insertar = pokemon_clonar(p_a);
+	while (lista_iterador_se_puede_iterar(t1) && !err) {
+        struct pokemon *p_a = (struct pokemon *)lista_iterador_obtener_elemento(t1);
+
+		char rareza_a = tipo_rareza(p_a);
+		
+        struct pokemon *a_insertar = pokemon_crear(p_a->nombre, p_a->velocidad, p_a->peso, rareza_a);
 
         if (!a_insertar || !lista_insertar(nuevo->pokemones, a_insertar, posicion)) {
             err = true;
         } else {
-            lista_iterador_avanzar(t1);
+            lista_iterador_siguiente(t1);
         }
     }
 
-    while (lista_iterador_tiene_siguiente(t2) && !err) {
-        struct pokemon *p_b = (struct pokemon *)lista_iterador_elemento_actual(t2);
-        struct pokemon *a_insertar = pokemon_clonar(p_b);
+    while (lista_iterador_se_puede_iterar(t2) && !err) {
+        struct pokemon *p_b = (struct pokemon *)lista_iterador_obtener_elemento(t2);
+
+		char rareza_b = tipo_rareza(p_b);
+		
+        struct pokemon *a_insertar = pokemon_crear(p_b->nombre, p_b->velocidad, p_b->peso, rareza_b);
 
         if (!a_insertar || !lista_insertar(nuevo->pokemones, a_insertar, posicion)) {
             err = true;
         } else {
-            lista_iterador_avanzar(t2);
+            lista_iterador_siguiente(t2);
         }
     }
 
@@ -301,9 +307,9 @@ bool combinacion_de_tps(lista_iterador_t *t1, lista_iterador_t *t2, tp1_t *nuevo
 {
 	bool err = false;
 
-    while (lista_iterador_tiene_siguiente(t1) && lista_iterador_tiene_siguiente(t2) && !err) {
-        struct pokemon *p_a = (struct pokemon *)lista_iterador_elemento_actual(t1);
-        struct pokemon *p_b = (struct pokemon *)lista_iterador_elemento_actual(t2);
+    while (lista_iterador_se_puede_iterar(t1) && lista_iterador_se_puede_iterar(t2) && !err) {
+        struct pokemon *p_a = (struct pokemon *)lista_iterador_obtener_elemento(t1);
+        struct pokemon *p_b = (struct pokemon *)lista_iterador_obtener_elemento(t2);
 
 		size_t posicion = lista_cantidad(nuevo->pokemones);
 
@@ -315,15 +321,15 @@ bool combinacion_de_tps(lista_iterador_t *t1, lista_iterador_t *t2, tp1_t *nuevo
 
         if (cmp < 0) {
             a_insertar = pokemon_crear(p_a->nombre, p_a->velocidad, p_a->peso, rareza_a);
-            lista_iterador_avanzar(t1);
+            lista_iterador_siguiente(t1);
         } else if (cmp > 0) {
             a_insertar = pokemon_crear(p_b->nombre, p_b->velocidad, p_b->peso, rareza_b);
-            lista_iterador_avanzar(t2);
+            lista_iterador_siguiente(t2);
         } else {
             a_insertar = pokemon_crear(p_a->nombre, p_a->velocidad, p_a->peso, rareza_a);
 
-            lista_iterador_avanzar(t1);
-            lista_iterador_avanzar(t2); // Se descarta el de tp1_b
+            lista_iterador_siguiente(t1);
+            lista_iterador_siguiente(t2); // Se descarta el de tp1_b
         }
 
         if (!a_insertar || !lista_insertar(nuevo->pokemones, a_insertar, posicion)) {
@@ -454,9 +460,25 @@ struct pokemon *tp1_buscar_pokemon(tp1_t *tp1, const char *nombre)
 		return NULL;
 	}
 
-	size_t posicion = lista_iterar(tp1->pokemones, buscar_pokemon, nombre);
+	lista_iterador_t *it = lista_iterador_crear(tp1->pokemones);
 
-	return lista_obtener(tp1->pokemones, posicion);
+	if (!it) return NULL;
+
+	bool encontrado = false;
+
+	struct pokemon *p = NULL;
+
+	while (lista_iterador_se_puede_iterar(it) && !encontrado) {
+		p = lista_iterador_obtener_elemento(it);
+
+		if (no_case_sensitive_strcmp(p->nombre, nombre) == 0) {
+			encontrado = true;
+		}
+	}
+
+	lista_iterador_destruir(it);
+
+	return p;
 }
 
 
@@ -481,11 +503,26 @@ struct pokemon *tp1_buscar_orden(tp1_t *tp1, size_t n)
  */
 size_t tp1_iterar(tp1_t *tp1, bool (*f)(struct pokemon *, void *), void *extra)
 {
-	if (!tp1 || !f || extra) {
+	if (!tp1 || !f || !extra) {
 		return 0;
 	}
 
-	return lista_iterar(tp1->pokemones, f, extra);
+	bool fin = false;
+
+	size_t contador = 0;
+
+	size_t cantidad = lista_cantidad(tp1->pokemones);
+
+	for (int i = 0; i < cantidad && !fin; i++) {
+		contador++;
+		struct pokemon *p = lista_obtener(tp1->pokemones, i);
+
+		if (!(f)(p, extra)) {
+			fin = true;
+		}
+	}
+
+	return contador;
 }
 
 void destruir_pokemon(void *pokemon)
